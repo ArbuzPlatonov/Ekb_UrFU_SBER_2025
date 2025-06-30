@@ -54,14 +54,29 @@ def calculate_optical_flow(prev_frame, current_frame):
     angle = np.degrees(np.arctan2(mean_flow_y, mean_flow_x))
     return {'magnitude': magnitude, 'angle': angle, 'mean_x': mean_flow_x, 'mean_y': mean_flow_y, 'std_x': std_flow_x, 'std_y': std_flow_y}
 
+def calculate_satellite_velocity_vector(velocity, pitch, yaw):
+    vx = velocity * np.cos(np.radians(pitch)) * np.cos(np.radians(yaw))
+    vy = velocity * np.cos(np.radians(pitch)) * np.sin(np.radians(yaw))
+    vz = velocity * np.sin(np.radians(pitch))
+    return (vx, vy, vz)
+
+def calculate_wind_vector(wind_speed, wind_direction):
+    wx = wind_speed * np.cos(np.radians(wind_direction))
+    wy = wind_speed * np.sin(np.radians(wind_direction))
+    wz = 0
+    return (wx, wy, wz)
+
 def generate_correction_command(similarity, flow_data, env_data, timestamp, current_frame):
     altitude = env_data['altitude']
     velocity = env_data['velocity']
     wind_speed = env_data['wind_speed']
+    wind_direction = env_data['wind_direction']
     pressure = env_data['pressure']
     temperature = env_data['temperature']
     flow_angle = flow_data['angle']
     flow_magnitude = flow_data['magnitude']
+    sat_velocity = calculate_satellite_velocity_vector(velocity, env_data['pitch'], env_data['yaw'])
+    wind_vector = calculate_wind_vector(wind_speed, wind_direction)
     if similarity > 30:
         status = "Нормальное отклонение"
     elif similarity > 25:
@@ -81,7 +96,7 @@ def generate_correction_command(similarity, flow_data, env_data, timestamp, curr
 Статус: {status} (схожесть: {similarity:.2f}%)
 Основные параметры:
   Высота: {altitude:.1f} м | Скорость: {velocity:.1f} м/с
-  Ветер: {wind_speed:.1f} м/с | Давление: {pressure:.1f} hPa | Температура: {temperature:.1f}°C
+  Ветер: {wind_speed:.1f} м/с ({wind_direction:.1f}°) | Давление: {pressure:.1f} hPa | Температура: {temperature:.1f}°C
 
 Рекомендации по коррекции:
 1. Рыскание (Yaw): 
@@ -105,6 +120,8 @@ def generate_correction_command(similarity, flow_data, env_data, timestamp, curr
 - Магнитуда потока: {flow_magnitude:.4f}
 - Стандартное отклонение X: {flow_data['std_x']:.4f}
 - Стандартное отклонение Y: {flow_data['std_y']:.4f}
+- Вектор скорости БЛА: X={sat_velocity[0]:.2f}, Y={sat_velocity[1]:.2f}, Z={sat_velocity[2]:.2f} м/с
+- Вектор ветра: X={wind_vector[0]:.2f}, Y={wind_vector[1]:.2f}, Z={wind_vector[2]:.2f} м/с
 """
     return recommendation
 
@@ -151,8 +168,11 @@ def get_environment_data(timestamp):
         'altitude': 100 + 5 * np.sin(timestamp/10),
         'velocity': 20 + 2 * np.cos(timestamp/5),
         'wind_speed': 8 + 3 * np.sin(timestamp/7),
+        'wind_direction': 45 + 30 * np.sin(timestamp/12),
         'pressure': 1013 - 10 * np.cos(timestamp/8),
-        'temperature': 25 + 10 * np.sin(timestamp/9)
+        'temperature': 25 + 10 * np.sin(timestamp/9),
+        'pitch': 5 * np.sin(timestamp/11),
+        'yaw': 10 * np.sin(timestamp/13)
     }
 
 def process_videos(video_a2b, video_b2a, output_file):
@@ -215,3 +235,4 @@ if __name__ == "__main__":
     total_time = time.time() - start_time
     print(f"Обработка завершена за {total_time:.2f} секунд")
     print(f"Детализированные рекомендации сохранены в dp1140.txt")
+
